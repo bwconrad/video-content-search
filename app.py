@@ -93,7 +93,7 @@ def run(
             if p > thresh:
                 matches.append(to_pil_image(orig[i]))
 
-        print(f"Frames: {frame} - Probs: {probs}")
+        print(f"Frames: {frame.tolist()} - Probs: {probs}")
 
     # Create plot of similarity values
     lines = (
@@ -106,7 +106,7 @@ def run(
     ).properties(width=600)
     rule = alt.Chart().mark_rule(strokeDash=[6, 3], size=2).encode(y=alt.datum(thresh))
 
-    return matches, lines + rule
+    return matches[:30], lines + rule
 
 
 class LoadVideo(Dataset):
