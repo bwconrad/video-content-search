@@ -1,23 +1,30 @@
+import altair as alt
 import cv2
 import gradio as gr
 import numpy as np
 import open_clip
+import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms.functional import to_pil_image, to_tensor
-from torchvision.utils import save_image
 
 
 def run(
     path: str,
-    model_key: tuple[str, str],
-    search: str,
+    model_key: str,
+    text_search: str,
+    image_search: Image.Image,
     thresh: float,
     stride: int,
     batch_size: int,
     center_crop: bool,
 ):
+
+    assert path, "An input video should be provided"
+    assert (
+        text_search is not None or image_search is not None
+    ), "A text or image query should be provided"
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -29,14 +36,11 @@ def run(
     model, _, preprocess = open_clip.create_model_and_transforms(
         name, pretrained=weights, device=device
     )
+    model.eval()
 
     # Remove center crop transform
     if not center_crop:
         del preprocess.transforms[1]
-
-    # Tokenize search phrase
-    tokenizer = open_clip.get_tokenizer(name)
-    text = tokenizer([search]).to(device)
 
     # Load video
     dataset = LoadVideo(path, transforms=preprocess, vid_stride=stride)
@@ -44,29 +48,65 @@ def run(
         dataset, batch_size=batch_size, shuffle=False, num_workers=0
     )
 
-    # Encode text description once
-    with torch.no_grad():
-        text_features = model.encode_text(text)
-        text_features /= text_features.norm(dim=-1, keepdim=True)
+    # Get text query features
+    if text_search:
+        # Tokenize search phrase
+        tokenizer = open_clip.get_tokenizer(name)
+        text = tokenizer([text_search]).to(device)
 
-    # Encode each frame and compare with text features
+        # Encode text query
+        with torch.no_grad():
+            query_features = model.encode_text(text)
+            query_features /= query_features.norm(dim=-1, keepdim=True)
+
+    # Get image query features
+    else:
+        image = preprocess(image_search).unsqueeze(0).to(device)
+        with torch.no_grad():
+            query_features = model.encode_image(image)
+            query_features /= query_features.norm(dim=-1, keepdim=True)
+
+    # Encode each frame and compare with query features
     matches = []
-    res = []
+    res = pd.DataFrame(columns=["Frame", "Timestamp", "Similarity"])
     for image, orig, frame, timestamp in dataloader:
         with torch.no_grad():
             image = image.cuda()
             image_features = model.encode_image(image)
 
         image_features /= image_features.norm(dim=-1, keepdim=True)
-        probs = text_features.cpu().numpy() @ image_features.cpu().numpy().T
+        probs = query_features.cpu().numpy() @ image_features.cpu().numpy().T
+        probs = probs[0]
 
-        for i, p in enumerate(probs[0]):
+        # Save frame similarity values
+        df = pd.DataFrame(
+            {
+                "Frame": frame.tolist(),
+                "Timestamp": torch.round(timestamp / 1000, decimals=2).tolist(),
+                "Similarity": probs.tolist(),
+            }
+        )
+        res = pd.concat([res, df])
+
+        # Check if frame is over threshold
+        for i, p in enumerate(probs):
             if p > thresh:
                 matches.append(to_pil_image(orig[i]))
 
-        print(f"Probs: {probs}")
+        print(f"Frames: {frame} - Probs: {probs}")
 
-    return matches
+    # Create plot of similarity values
+    lines = (
+        alt.Chart(res)
+        .mark_line(color="firebrick")
+        .encode(
+            alt.X("Timestamp", title="Timestamp (seconds)"),
+            alt.Y("Similarity", scale=alt.Scale(zero=False)),
+        )
+    ).properties(width=600)
+    rule = alt.Chart().mark_rule(strokeDash=[6, 3], size=2).encode(y=alt.datum(thresh))
+
+    return matches, lines + rule
 
 
 class LoadVideo(Dataset):
@@ -154,30 +194,69 @@ MODELS = {
 
 
 # Run app
-description = """
-An application for searching the content's of a video with a text query.
+text_description = """
+Search the content's of a video with a text description.
 """
 
-app = gr.Interface(
-    title="Clip Video Content Search",
-    description=description,
-    fn=run,
-    inputs=[
-        gr.Video(label="Video"),
-        gr.Dropdown(
-            label="Model",
-            choices=list(MODELS.keys()),
-            value="convnext_base_w - laion2b_s13b_b82k",
-        ),
-        gr.Textbox(label="Search Query"),
-        gr.Slider(label="Threshold", maximum=1.0, value=0.3),
-        gr.Slider(label="Frame-rate Stride", value=4, step=1),
-        gr.Slider(label="Batch Size", value=4, step=1),
-        gr.Checkbox(label="Center Crop"),
-    ],
-    outputs=gr.Gallery(label="Matched Frames").style(
-        columns=2, object_fit="contain", height="auto"
-    ),
-    allow_flagging="never",
-)
-app.launch()
+image_description = """
+Search the content's of a video with an image query.
+"""
+
+if __name__ == "__main__":
+    text_app = gr.Interface(
+        description=text_description,
+        fn=run,
+        inputs=[
+            gr.Video(label="Video"),
+            gr.Dropdown(
+                label="Model",
+                choices=list(MODELS.keys()),
+                value="convnext_base_w - laion2b_s13b_b82k",
+            ),
+            gr.Textbox(label="Text Search Query"),
+            gr.Image(label="Image Search Query", visible=False),
+            gr.Slider(label="Threshold", maximum=1.0, value=0.3),
+            gr.Slider(label="Frame-rate Stride", value=4, step=1),
+            gr.Slider(label="Batch Size", value=4, step=1),
+            gr.Checkbox(label="Center Crop"),
+        ],
+        outputs=[
+            gr.Gallery(label="Matched Frames").style(
+                columns=2, object_fit="contain", height="auto"
+            ),
+            gr.Plot(label="Similarity Plot"),
+        ],
+        allow_flagging="never",
+    )
+
+    image_app = gr.Interface(
+        description=image_description,
+        fn=run,
+        inputs=[
+            gr.Video(label="Video"),
+            gr.Dropdown(
+                label="Model",
+                choices=list(MODELS.keys()),
+                value="convnext_base_w - laion2b_s13b_b82k",
+            ),
+            gr.Textbox(label="Text Search Query", visible=False),
+            gr.Image(label="Image Search Query", type="pil"),
+            gr.Slider(label="Threshold", maximum=1.0, value=0.3),
+            gr.Slider(label="Frame-rate Stride", value=4, step=1),
+            gr.Slider(label="Batch Size", value=4, step=1),
+            gr.Checkbox(label="Center Crop"),
+        ],
+        outputs=[
+            gr.Gallery(label="Matched Frames").style(
+                columns=2, object_fit="contain", height="auto"
+            ),
+            gr.Plot(label="Similarity Plot"),
+        ],
+        allow_flagging="never",
+    )
+    app = gr.TabbedInterface(
+        interface_list=[text_app, image_app],
+        tab_names=["Text Query Search", "Image Query Search"],
+        title="CLIP Video Content Search",
+    )
+    app.launch()
