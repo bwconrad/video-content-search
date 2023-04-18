@@ -193,18 +193,9 @@ MODELS = {
 }
 
 
-# Run app
-text_description = """
-Search the content's of a video with a text description.
-"""
-
-image_description = """
-Search the content's of a video with an image query.
-"""
-
 if __name__ == "__main__":
     text_app = gr.Interface(
-        description=text_description,
+        description="Search the content's of a video with a text description.",
         fn=run,
         inputs=[
             gr.Video(label="Video"),
@@ -230,7 +221,7 @@ if __name__ == "__main__":
     )
 
     image_app = gr.Interface(
-        description=image_description,
+        description="Search the content's of a video with an image query.",
         fn=run,
         inputs=[
             gr.Video(label="Video"),
