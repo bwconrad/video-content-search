@@ -123,7 +123,7 @@ class LoadVideo(Dataset):
     def __getitem__(self, _):
         # Read video
         # Skip over frames
-        for _ in range(self.vid_stride):
+        for _ in range(self.vid_stride - 1):
             self.cap.grab()
 
         # Read frame
