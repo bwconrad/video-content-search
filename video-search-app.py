@@ -71,7 +71,7 @@ def run(
     res = pd.DataFrame(columns=["Frame", "Timestamp", "Similarity"])
     for image, orig, frame, timestamp in dataloader:
         with torch.no_grad():
-            image = image.cuda()
+            image = image.to(device)
             image_features = model.encode_image(image)
 
         image_features /= image_features.norm(dim=-1, keepdim=True)
