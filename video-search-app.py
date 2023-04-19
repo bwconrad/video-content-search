@@ -123,12 +123,12 @@ class LoadVideo(Dataset):
     def __getitem__(self, _):
         # Read video
         # Skip over frames
-        for _ in range(self.vid_stride - 1):
+        for _ in range(self.vid_stride):
             self.cap.grab()
+            self.cur_frame += 1
 
         # Read frame
         _, img = self.cap.retrieve()
-        self.cur_frame += 1
         timestamp = self.cap.get(cv2.CAP_PROP_POS_MSEC)
 
         # Convert to PIL
