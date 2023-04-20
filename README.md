@@ -20,4 +20,4 @@ An application for searching videos to find frames that match a text or image qu
 - __Note__: The web app can have performance issues with long videos (more than a few minutes). Instead us the notebook for longer videos.
 
 #### Notebook
-[`video-search-notebook.ipynb`](video-search-notebook.ipyb) provides an alternate UI with a few extra features.
+[`video-search-notebook.ipynb`](video-search-notebook.ipynb) provides an alternate UI with a few extra features.
