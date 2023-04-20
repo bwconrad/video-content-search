@@ -106,7 +106,7 @@ def run(
     ).properties(width=600)
     rule = alt.Chart().mark_rule(strokeDash=[6, 3], size=2).encode(y=alt.datum(thresh))
 
-    return matches[:30], lines + rule
+    return lines + rule, matches[:30]  # Only return up to 30 images to not crash the UI
 
 
 class LoadVideo(Dataset):
@@ -194,8 +194,13 @@ MODELS = {
 
 
 if __name__ == "__main__":
+    desc_text = """
+Search the content's of a video with a text description.
+
+__Note__: Long videos (over a few minutes) may cause UI performance issues. The notebook version is recommended when this is an issue.
+    """
     text_app = gr.Interface(
-        description="Search the content's of a video with a text description.",
+        description=desc_text,
         fn=run,
         inputs=[
             gr.Video(label="Video"),
@@ -212,16 +217,21 @@ if __name__ == "__main__":
             gr.Checkbox(label="Center Crop"),
         ],
         outputs=[
+            gr.Plot(label="Similarity Plot"),
             gr.Gallery(label="Matched Frames").style(
                 columns=2, object_fit="contain", height="auto"
             ),
-            gr.Plot(label="Similarity Plot"),
         ],
         allow_flagging="never",
     )
 
+    desc_image = """
+Search the content's of a video with an image query.
+
+__Note__: Long videos (over a few minutes) may cause UI performance issues. The notebook version is recommended when this is an issue.
+    """
     image_app = gr.Interface(
-        description="Search the content's of a video with an image query.",
+        description=desc_image,
         fn=run,
         inputs=[
             gr.Video(label="Video"),
@@ -238,10 +248,10 @@ if __name__ == "__main__":
             gr.Checkbox(label="Center Crop"),
         ],
         outputs=[
+            gr.Plot(label="Similarity Plot"),
             gr.Gallery(label="Matched Frames").style(
                 columns=2, object_fit="contain", height="auto"
             ),
-            gr.Plot(label="Similarity Plot"),
         ],
         allow_flagging="never",
     )
