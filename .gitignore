@@ -1,6 +1,7 @@
 data/
 out/
 .jupyter/
+spaces/
 
 
 # Byte-compiled / optimized / DLL files
